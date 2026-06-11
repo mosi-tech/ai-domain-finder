@@ -1,4 +1,5 @@
 import { NextRequest, NextResponse } from "next/server";
+import { sanitizeDomainList } from "@/lib/sanitize";
 
 const NAMECHEAP_API_USER = process.env.NAMECHEAP_API_USER!;
 const NAMECHEAP_API_KEY = process.env.NAMECHEAP_API_KEY!;
@@ -17,12 +18,20 @@ interface DomainCheck {
 }
 
 async function checkNamecheap(domains: string[]): Promise<DomainCheck[]> {
-  const domainList = domains.join(",");
+  // Encode domain list for URL safety
+  const domainList = domains.map(encodeURIComponent).join(",");
   console.log(`[Namecheap] Checking ${domains.length} domains against ${NAMECHEAP_SANDBOX ? 'SANDBOX' : 'PRODUCTION'} API`);
-  const url = `${API_URL}?ApiUser=${NAMECHEAP_API_USER}&ApiKey=${NAMECHEAP_API_KEY}&UserName=${NAMECHEAP_API_USER}&Command=namecheap.domains.check&ClientIp=${NAMECHEAP_CLIENT_IP}&DomainList=${domainList}`;
+  const url = `${API_URL}?ApiUser=${encodeURIComponent(NAMECHEAP_API_USER)}&ApiKey=${encodeURIComponent(NAMECHEAP_API_KEY)}&UserName=${encodeURIComponent(NAMECHEAP_API_USER)}&Command=namecheap.domains.check&ClientIp=${encodeURIComponent(NAMECHEAP_CLIENT_IP)}&DomainList=${domainList}`;
 
   const response = await fetch(url);
   const text = await response.text();
+
+  // Check for API-level errors
+  if (text.includes('<Errors>') && text.includes('Error')) {
+    const errorMatch = text.match(/<Error[^>]*>([^<]+)<\/Error>/);
+    const errorMsg = errorMatch ? errorMatch[1] : "Unknown Namecheap API error";
+    throw new Error(`Namecheap API error: ${errorMsg}`);
+  }
 
   const results: DomainCheck[] = [];
   const domainRegex = /DomainCheckResult[^>]*Domain="([^"]+)"[^>]*Available="([^"]+)"[^>]*IsPremiumName="([^"]+)"[^>]*(?:IsPremiumDomain="([^"]+)")?[^>]*/g;
@@ -46,7 +55,7 @@ async function checkNamecheap(domains: string[]): Promise<DomainCheck[]> {
   }
 
   if (results.length === 0) {
-    throw new Error(`Namecheap API returned no results. Response: ${text.substring(0, 500)}`);
+    throw new Error(`Namecheap API returned no results`);
   }
 
   return results;
@@ -56,25 +65,21 @@ export async function POST(request: NextRequest) {
   const body = await request.json();
   const { domains } = body as { domains: string[] };
 
-  if (!domains || !Array.isArray(domains) || domains.length === 0) {
-    return NextResponse.json({ error: "No domains provided" }, { status: 400 });
-  }
-
-  if (domains.length > 50) {
-    return NextResponse.json(
-      { error: "Maximum 50 domains per request" },
-      { status: 400 }
-    );
+  // Sanitize and validate domain list
+  const cleanDomains = sanitizeDomainList(domains);
+  if (!cleanDomains) {
+    return NextResponse.json({ error: "Invalid domain list. Must be an array of 1-50 valid domain names." }, { status: 400 });
   }
 
   try {
-    const results = await checkNamecheap(domains);
+    const results = await checkNamecheap(cleanDomains);
     return NextResponse.json({
       results,
       checked: results.length,
     });
   } catch (error) {
     const message = error instanceof Error ? error.message : "Namecheap API error";
+    console.error("[Namecheap]", message);
     return NextResponse.json({ error: message }, { status: 502 });
   }
 }

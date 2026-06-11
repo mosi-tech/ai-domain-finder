@@ -18,6 +18,7 @@ import {
 } from "lucide-react";
 import { combineWords, generateDomains } from "@/lib/domains";
 import { prefixPresets, suffixPresets, defaultTLDs } from "@/lib/defaults";
+import { sanitizeWordList, sanitizeDomain } from "@/lib/sanitize";
 import { DomainResult, CombineMode } from "@/lib/types";
 
 const combineModes: { id: CombineMode; label: string }[] = [
@@ -64,7 +65,8 @@ export default function Home() {
   );
 
   const handleAIGenerate = useCallback(async () => {
-    if (!aiInput.trim() || !aiModalTarget) return;
+    const cleanInput = aiInput.trim().replace(/<[^>]*>/g, "").replace(/https?:\/\/\S+/gi, "").trim();
+    if (!cleanInput || cleanInput.length > 500 || !aiModalTarget) return;
     setAiLoading(true);
     const typeParam = aiType === "related" ? null : aiType;
     try {
@@ -72,7 +74,7 @@ export default function Home() {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
-          idea: aiInput.trim(),
+          idea: cleanInput,
           type: typeParam,
         }),
       });
@@ -91,17 +93,25 @@ export default function Home() {
   }, [aiInput, aiModalTarget, aiType]);
 
   const handleSearch = useCallback(async () => {
-    const prefixes = prefixText.split(/[,\n]/).map((w) => w.trim()).filter(Boolean);
-    const suffixes = suffixText.split(/[,\n]/).map((w) => w.trim()).filter(Boolean);
+    const prefixes = sanitizeWordList(prefixText);
+    const suffixes = sanitizeWordList(suffixText);
 
-    if (prefixes.length === 0 || suffixes.length === 0 || selectedTLDs.length === 0) return;
+    if (!prefixes || !suffixes || prefixes.length === 0 || suffixes.length === 0 || selectedTLDs.length === 0) return;
 
     setLoading(true);
     setResults([]);
     setSearched(true);
 
     const combos = combineWords(prefixes, suffixes, combineMode);
-    const domains = generateDomains(combos, selectedTLDs);
+    const rawDomains = generateDomains(combos, selectedTLDs);
+
+    // Sanitize domains client-side before sending
+    const domains = rawDomains.map(sanitizeDomain).filter((d): d is string => d !== null);
+
+    if (domains.length === 0) {
+      setLoading(false);
+      return;
+    }
 
     const batchSize = 50;
     const allResults: DomainResult[] = [];

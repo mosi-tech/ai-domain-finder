@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import OpenAI from "openai";
+import { sanitizeIdea, isValidGenerateType, sanitizeWord } from "@/lib/sanitize";
 
 const LITELLM_MODEL = process.env.LITELLM_MODEL || "gpt-4o-mini";
 const LITELLM_BASE_URL = process.env.LITELLM_BASE_URL || "https://api.openai.com/v1";
@@ -57,11 +58,8 @@ const COMMON_ENGLISH_WORDS = new Set([
 ]);
 
 function extractWords(text: string): string[] {
-  // First try to find a clear comma-separated list in the text
-  // Look for patterns like "word, word, word" (the actual output)
   const lines = text.split("\n");
 
-  // Try to find lines that look like comma-separated word lists
   for (const line of lines) {
     const parts = line.split(",").map((w) => w.trim().toLowerCase().replace(/[^a-z0-9]/g, ""));
     const validParts = parts.filter((w) => w.length >= 2 && w.length <= 12 && !COMMON_ENGLISH_WORDS.has(w));
@@ -70,7 +68,6 @@ function extractWords(text: string): string[] {
     }
   }
 
-  // Fallback: extract all short non-dictionary words
   const allWords = text
     .split(/[,.\n;:!?()\[\]{}"']+/)
     .map((w) => w.trim().toLowerCase().replace(/[^a-z0-9]/g, ""))
@@ -83,8 +80,15 @@ export async function POST(request: NextRequest) {
   const body = await request.json();
   const { idea, type } = body as { idea: string; type: "prefix" | "suffix" | null };
 
-  if (!idea) {
-    return NextResponse.json({ error: "Missing idea" }, { status: 400 });
+  // Validate and sanitize idea
+  const cleanIdea = sanitizeIdea(idea);
+  if (!cleanIdea) {
+    return NextResponse.json({ error: "Invalid or empty idea text" }, { status: 400 });
+  }
+
+  // Validate type
+  if (!isValidGenerateType(type)) {
+    return NextResponse.json({ error: "Invalid type. Must be 'prefix', 'suffix', or null" }, { status: 400 });
   }
 
   const count = 12;
@@ -108,7 +112,7 @@ export async function POST(request: NextRequest) {
       model: LITELLM_MODEL,
       messages: [
         { role: "system", content: systemContent },
-        { role: "user", content: idea },
+        { role: "user", content: cleanIdea },
       ],
       temperature: 0.8,
       max_tokens: 500,
@@ -129,7 +133,9 @@ export async function POST(request: NextRequest) {
       throw new Error("No words generated");
     }
 
-    const words = extractWords(content);
+    const rawWords = extractWords(content);
+    // Sanitize each extracted word
+    const words = rawWords.map(sanitizeWord).filter((w): w is string => w !== null);
 
     if (words.length >= 3) {
       return NextResponse.json({ words: words.slice(0, count) });
@@ -138,7 +144,7 @@ export async function POST(request: NextRequest) {
     throw new Error("Not enough words parsed from LLM response");
   } catch (error) {
     console.error("LLM generation failed, using fallback:", error);
-    const words = generateFallback(idea.toLowerCase().trim(), type ?? null);
+    const words = generateFallback(cleanIdea, type ?? null);
     return NextResponse.json({ words, fallback: true });
   }
 }
