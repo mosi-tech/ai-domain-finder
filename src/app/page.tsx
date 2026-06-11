@@ -10,7 +10,7 @@ import {
   CheckCircle2,
   XCircle,
   Tag,
-  Zap,
+
   Bot,
   X,
   Eye,
@@ -242,7 +242,7 @@ export default function Home() {
       <div className="relative z-10">
         {/* Header */}
         <header className="border-b border-white/5 backdrop-blur-xl bg-white/[0.02]">
-          <div className="max-w-7xl mx-auto px-6 py-5 flex items-center justify-between">
+          <div className="max-w-7xl mx-auto px-6 py-5 flex items-center">
             <div className="flex items-center gap-3">
               <div className="w-10 h-10 rounded-xl bg-gradient-to-br from-indigo-500 to-purple-600 flex items-center justify-center shadow-lg shadow-indigo-500/25">
                 <Sparkles className="w-5 h-5 text-white" />
@@ -251,10 +251,6 @@ export default function Home() {
                 <h1 className="text-xl font-bold tracking-tight">DomainForge</h1>
                 <p className="text-xs text-slate-400">AI-Powered Domain Finder</p>
               </div>
-            </div>
-            <div className="flex items-center gap-2 text-xs text-slate-500">
-              <Zap className="w-3.5 h-3.5" />
-              <span>Powered by Namecheap</span>
             </div>
           </div>
         </header>
@@ -515,7 +511,6 @@ export default function Home() {
         <footer className="border-t border-white/[0.04] mt-16">
           <div className="max-w-7xl mx-auto px-6 py-6 flex items-center justify-between text-xs text-slate-600">
             <span>DomainForge - Find your perfect domain</span>
-            <span>Domain availability powered by Namecheap</span>
           </div>
         </footer>
       </div>
