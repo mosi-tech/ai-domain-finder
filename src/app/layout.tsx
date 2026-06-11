@@ -9,8 +9,11 @@ const inter = Inter({
 
 export const metadata: Metadata = {
   title: "DomainForge - AI-Powered Domain Finder",
-  description:
-    "Combine word lists to discover available domain names across multiple TLDs. Powered by Namecheap.",
+  description: "Combine word lists to discover available domain names across multiple TLDs.",
+  icons: {
+    icon: "/icon.svg",
+    apple: "/apple-icon.svg",
+  },
 };
 
 export default function RootLayout({
